@@ -9,7 +9,7 @@
 
 #ifndef STASSID
 #define STASSID "WIFI-SSID"
-#define STAPSK  "WIFI-PASSWORD"
+#define STAPSK  "WIFI-PASS"
 #endif
 
 WiFiClient client;
@@ -20,27 +20,27 @@ SoftwareSerial mySerial(5, 4);
 // --------- Information to Connect to Adafruit IO -------------------------------------------
 #define AIO_SERVER      "io.adafruit.com"
 #define AIO_SERVERPORT  1883                   // use 8883 for SSL
-#define AIO_USERNAME    "username"
-#define AIO_KEY         "some-key"
+#define AIO_USERNAME    "USER"
+#define AIO_KEY         "API-KEY"
 #define CPM_FEED       "/feeds/geiger.cpm"
 #define IOT_INTERVAL   1*61*1000 // 1 minute
 Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
 Adafruit_MQTT_Publish FeedCpm = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME CPM_FEED);
 
 //------------ Clock parameters -------------------------------------------------------------
-#define NtpServer "NTP-SERVER-IP"
+#define NtpServer "NTP-SERVER"
 #define NTP_INTERVAL 5*60*1000 // 5 minutes
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, NtpServer);
 int cntNtp;
 
 //------------ RadMon Parameters -------------------------------------------------------------
-String radMonUser = "username";
-String radMonPass = "upload-pass";
+String radMonUser = "USERNAME";
+String radMonPass = "UPLOAD-PASS";
 
 //------------ GMCMap Parameters -------------------------------------------------------------
-String gmcMapUser = "user-id";
-String gmcMapId = "counter-id";
+String gmcMapUser = "USERID";
+String gmcMapId = "COUNTERID";
 
 //--------------------------------------------------------------------------------------------
 const char* ssid = STASSID;
@@ -68,13 +68,13 @@ void setup() {
     }
   }
 
-  delay(10000);
-  // Now that we are connected lower power
+  // Big delay to allow reprogramming in case of bad signal
+  //delay(10000);
+  // Now that we are connected lower power to lower consumption
   WiFi.setOutputPower(0);
 
   // Hostname defaults to esp8266-[ChipID]
   ArduinoOTA.setHostname("GMC-320");
-
   ArduinoOTA.onStart([]() {
     String type;
     if (ArduinoOTA.getCommand() == U_FLASH) {
@@ -83,7 +83,6 @@ void setup() {
       type = "filesystem";
     }
   });
-
   ArduinoOTA.begin();
 
   // Initialize timeClient library
@@ -91,7 +90,7 @@ void setup() {
   // Set timezone
   timeClient.setTimeOffset(3600);
   // Request NTP update
-  ntpUpdate();
+  setTime();
 }
 
 void loop() {
@@ -122,51 +121,38 @@ void loop() {
 }
 
 void setTime() {
+  // Get current time from NTP
   ntpUpdate();
+  // Wait a little
   delay(100);
   int tempVal = 0;
   //22. Set year date and time
   //command: <SETDATETIME[YYMMDDHHMMSS]>>
   time_t epochTime = timeClient.getEpochTime();
   struct tm *ptm = gmtime ((time_t *)&epochTime);
-  // Command
-  String setYear = "<SETDATETIME[";
+  // Command header
+  mySerial.print("<SETDATETIME");
   // Format year to YY
-  setYear += formatTime(((int)ptm->tm_year) - (int)100);
-  // Format month to MM
-  setYear += formatTime(ptm->tm_mon + 1);
-  // Format day to DD
-  setYear += formatTime(ptm->tm_mday);
+  mySerial.write(byte((int)ptm->tm_year - (int)100));
+  // Format month to DD
+  mySerial.write(byte(ptm->tm_mday));
+  // Format day to MM
+  mySerial.write(byte(ptm->tm_mon + 1));
   // Format hours to HH. Check if DST
   if (ptm->tm_isdst) {
-    setYear += formatTime(timeClient.getHours() + (int)1);
+    mySerial.write(byte(timeClient.getHours()+(int)1));
   } else {
-    setYear += formatTime(timeClient.getHours());
+    mySerial.write(byte(timeClient.getHours()));
   }
   // Format minutes to MM
-  setYear += formatTime(timeClient.getMinutes());
+  mySerial.write(byte(timeClient.getMinutes()));
   // Format seconds to SS
-  setYear += formatTime(timeClient.getSeconds());
+  mySerial.write(byte(timeClient.getSeconds()));
   // Terminating character
-  setYear += "]>>";
-  mySerial.print(setYear);
+  mySerial.println(">>");
   delay(1);
   byte reply[1];
   mySerial.readBytes(reply, 1);
-}
-
-String formatTime(int tempTime) {
-  // Function to format number to XX
-  String outTime = "";
-  if (tempTime < 10) {
-    outTime = "0" + String(tempTime);
-  } else {
-    outTime = String(tempTime);
-  }
-  // Force 2 character output
-  outTime = outTime.substring(outTime.length() - 2, outTime.length());
-  // Return string
-  return outTime;
 }
 
 void ntpUpdate() {
