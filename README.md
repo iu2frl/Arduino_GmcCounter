@@ -10,4 +10,5 @@ Arduino software to control GMC geiger counters
 + Report to RadMon
 + Report to GmcMap
 + ESP32 Auto poweroff if outside
++ MQTT reporting to Adafruit IO
 
