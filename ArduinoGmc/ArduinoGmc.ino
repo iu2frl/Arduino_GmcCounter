@@ -8,8 +8,8 @@
 #include <NTPClient.h>
 
 #ifndef STASSID
-#define STASSID "WIFI-SSID"
-#define STAPSK  "WIFI-PASS"
+#define STASSID "MySSID"
+#define STAPSK  "MyPASS"
 #endif
 
 WiFiClient client;
@@ -20,32 +20,33 @@ SoftwareSerial mySerial(5, 4);
 // --------- Information to Connect to Adafruit IO -------------------------------------------
 #define AIO_SERVER      "io.adafruit.com"
 #define AIO_SERVERPORT  1883                   // use 8883 for SSL
-#define AIO_USERNAME    "USER"
-#define AIO_KEY         "API-KEY"
+#define AIO_USERNAME    "MyUser"
+#define AIO_KEY         "MyApiKey"
 #define CPM_FEED       "/feeds/geiger.cpm"
 #define IOT_INTERVAL   1*61*1000 // 1 minute
 Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
 Adafruit_MQTT_Publish FeedCpm = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME CPM_FEED);
 
 //------------ Clock parameters -------------------------------------------------------------
-#define NtpServer "NTP-SERVER"
+#define NtpServer "192.168.0.1"
 #define NTP_INTERVAL 5*60*1000 // 5 minutes
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, NtpServer);
 int cntNtp;
 
 //------------ RadMon Parameters -------------------------------------------------------------
-String radMonUser = "USERNAME";
-String radMonPass = "UPLOAD-PASS";
+String radMonUser = "MyUser";
+String radMonPass = "MyPass";
 
 //------------ GMCMap Parameters -------------------------------------------------------------
-String gmcMapUser = "USERID";
-String gmcMapId = "COUNTERID";
+String gmcMapUser = "MyUser";
+String gmcMapId = "MyPass";
 
 //--------------------------------------------------------------------------------------------
 const char* ssid = STASSID;
 const char* password = STAPSK;
 int curCpm;
+int lastCpm;
 uint64_t iotUpdateTimestamp = 0;
 uint64_t ntpUpdateTimestamp = 0;
 
@@ -57,7 +58,7 @@ void setup() {
   //WiFi.setTxPower(WIFI_POWER_7dBm);
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  
+
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
     delay(1000);
     ++wifiCnt;
@@ -139,11 +140,11 @@ void setTime() {
   // Format day to MM
   mySerial.write(byte(ptm->tm_mon + 1));
   // Format hours to HH. Check if DST
-  if (ptm->tm_isdst) {
-    mySerial.write(byte(timeClient.getHours()+(int)1));
-  } else {
+  //if (ptm->tm_isdst) {
+  //  mySerial.write(byte(timeClient.getHours() + (int)1));
+  //} else {
     mySerial.write(byte(timeClient.getHours()));
-  }
+  //}
   // Format minutes to MM
   mySerial.write(byte(timeClient.getMinutes()));
   // Format seconds to SS
@@ -176,7 +177,21 @@ void getCpm() {
   mySerial.println("<GETCPM>>");
   delay(1);
   mySerial.readBytes(buf, 2);
-  curCpm = (int(buf[1]) + (int(buf[0] * 256)));
+  int cpmVal = (int(buf[1]) + (int(buf[0] * 256)));
+  if (lastCpm == 0) {
+    if (cpmVal < 100) {
+      curCpm = cpmVal;
+      lastCpm = cpmVal;
+    } else {
+      cpmVal = 20;
+      lastCpm = cpmVal;
+    }
+  } else if ((cpmVal > (lastCpm / 2)) && (cpmVal < (lastCpm * 2))) {
+    curCpm = cpmVal;
+    lastCpm = curCpm;
+  } else {
+    curCpm = lastCpm + 1;
+  }
 }
 
 void radMonPub() {
