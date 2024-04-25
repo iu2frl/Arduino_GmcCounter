@@ -70,8 +70,6 @@ void setup() {
     }
   }
 
-  // Now that we are connected lower power
-  // to reduce power consumption
   WiFi.setOutputPower(0);
 
   // Hostname defaults to esp8266-[ChipID]
@@ -91,6 +89,7 @@ void setup() {
   // Set timezone
   timeClient.setTimeOffset(3600);
   // Request NTP update
+  delay(5000);
   setTime();
 }
 
@@ -126,8 +125,7 @@ void setTime() {
   ntpUpdate();
   // Wait a little
   delay(100);
-  //22. Set year date and time
-  //command: <SETDATETIME[YYMMDDHHMMSS]>>
+  // Set year date and time
   time_t epochTime = timeClient.getEpochTime();
   struct tm* ptm = gmtime((time_t*)&epochTime);
   // Send year
@@ -151,7 +149,7 @@ bool sendData(const char *id, byte value) {
   mySerial.println(">>");
   delay(10);
   byte reply[1];
-  int len = mySerial.readBytes(reply, 1);
+  mySerial.readBytes(reply, 1);
   mySerial.flush();
   if (reply[0] == 0xAA) {
     return true;
