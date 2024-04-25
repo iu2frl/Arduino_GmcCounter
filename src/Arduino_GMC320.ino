@@ -8,7 +8,7 @@
 #include <NTPClient.h>
 #include "secrets.h"
 
-WiFiClient client;
+WiFiClient wifiClient;
 
 // --------- Username and passwords ----------------------------------------------------------
 // Declare the following variables in include/secrets.h 
@@ -28,35 +28,44 @@ WiFiClient client;
 //  #define NTPSERVER "some.ip.address"
 //  #define NTPINTERVAL 5 * 60 * 1000  // 5 minutes
 
+// SoftwareSerial initialization
 SoftwareSerial mySerial(5, 4);
 
-Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
-Adafruit_MQTT_Publish FeedCpm = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME CPM_FEED);
+// Adafruit IoT initialization
+Adafruit_MQTT_Client mqttClient(&wifiClient, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
+Adafruit_MQTT_Publish feedCpm = Adafruit_MQTT_Publish(&mqttClient, AIO_USERNAME CPM_FEED);
 
+// NTP client
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, NTPSERVER);
 int cntNtp;
 
+// https://radmon.org/index.php
 String radMonUser = RADMONUSER;
 String radMonPass = RADMONPASS;
 
+// https://gmcmap.com/
 String gmcMapUser = GMCMAPUSER;
 String gmcMapId = GMCMAPID;
 
+// Wifi data
 const char* ssid = STASSID;
 const char* password = STAPSK;
 
+// Global variables
 int curCpm;
 int lastCpm;
 uint64_t iotUpdateTimestamp = 0;
 uint64_t ntpUpdateTimestamp = 0;
 
+// --------- code ------------------
 void setup() {
   // Define a counter for no WiFi
   int wifiCnt = 0;
   // Initializing SoftwareSerial
   mySerial.begin(1200);
   //WiFi.setTxPower(WIFI_POWER_7dBm);
+  WiFi.setOutputPower(0);
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
 
@@ -69,8 +78,6 @@ void setup() {
       ESP.deepSleep(0);
     }
   }
-
-  WiFi.setOutputPower(0);
 
   // Hostname defaults to esp8266-[ChipID]
   ArduinoOTA.setHostname("GMC-320");
@@ -105,7 +112,7 @@ void loop() {
     // Read current CPM
     getCpm();
     // Publish data to AdafruitIO
-    FeedCpm.publish(curCpm);
+    feedCpm.publish(curCpm);
     // Publish data to RadMon
     radMonPub();
     // Publish data to gmcmap
@@ -180,7 +187,10 @@ void getCpm() {
   delay(1);
   mySerial.readBytes(buf, 2);
   int cpmVal = (int(buf[1]) + (int(buf[0] * 256)));
-  if (lastCpm == 0) {
+  if (cpmVal == 0) {
+    cpmVal = 20;
+    lastCpm = cpmVal;
+  } else if (lastCpm == 0) {
     if (cpmVal < 100) {
       curCpm = cpmVal;
       lastCpm = cpmVal;
@@ -197,33 +207,33 @@ void getCpm() {
 }
 
 void radMonPub() {
-  if (client.connect("radmon.org", 80)) {
-    client.print("GET /radmon.php?function=submit&user=");
-    client.print(radMonUser);
-    client.print("&password=");
-    client.print(radMonPass);
-    client.print("&value=");
-    client.print(String(curCpm));
-    client.print("&unit=CPM");
-    client.println(" HTTP/1.0");
-    client.println("HOST: radmon.org");
-    client.println("Connection: close");
-    client.println();
+  if (wifiClient.connect("radmon.org", 80)) {
+    wifiClient.print("GET /radmon.php?function=submit&user=");
+    wifiClient.print(radMonUser);
+    wifiClient.print("&password=");
+    wifiClient.print(radMonPass);
+    wifiClient.print("&value=");
+    wifiClient.print(String(curCpm));
+    wifiClient.print("&unit=CPM");
+    wifiClient.println(" HTTP/1.0");
+    wifiClient.println("HOST: radmon.org");
+    wifiClient.println("Connection: close");
+    wifiClient.println();
   }
 }
 
 void gmcMapPub() {
-  if (client.connect("gmcmap.com", 80)) {
-    client.print("GET /log2.asp?AID=");
-    client.print(gmcMapUser);
-    client.print("&GID=");
-    client.print(gmcMapId);
-    client.print("&CPM=");
-    client.print(String(curCpm));
-    client.println(" HTTP/1.0");
-    client.println("HOST: gmcmap.com");
-    client.println("Connection: close");
-    client.println();
+  if (wifiClient.connect("gmcmap.com", 80)) {
+    wifiClient.print("GET /log2.asp?AID=");
+    wifiClient.print(gmcMapUser);
+    wifiClient.print("&GID=");
+    wifiClient.print(gmcMapId);
+    wifiClient.print("&CPM=");
+    wifiClient.print(String(curCpm));
+    wifiClient.println(" HTTP/1.0");
+    wifiClient.println("HOST: gmcmap.com");
+    wifiClient.println("Connection: close");
+    wifiClient.println();
   }
 }
 
@@ -231,15 +241,15 @@ void MQTT_connect() {
   int8_t ret;
 
   // Stop if already connected.
-  if (mqtt.connected()) {
+  if (mqttClient.connected()) {
     return;
   }
 
   uint8_t retries = 3;
-  while ((ret = mqtt.connect()) != 0) {  // connect will return 0 for connected
+  while ((ret = mqttClient.connect()) != 0) {  // connect will return 0 for connected
     //Serial.println(mqtt.connectErrorString(ret));
     //Serial.println("Retrying MQTT connection in 5 seconds...");
-    mqtt.disconnect();
+    mqttClient.disconnect();
     delay(5000);  // wait 5 seconds
     retries--;
     if (retries == 0) {
