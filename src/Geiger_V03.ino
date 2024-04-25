@@ -70,9 +70,8 @@ void setup() {
     }
   }
 
-  // Big delay to allow reprogramming in case of bad signal
-  //delay(10000);
-  // Now that we are connected lower power to lower consumption
+  // Now that we are connected lower power
+  // to reduce power consumption
   WiFi.setOutputPower(0);
 
   // Hostname defaults to esp8266-[ChipID]
@@ -131,27 +130,34 @@ void setTime() {
   //command: <SETDATETIME[YYMMDDHHMMSS]>>
   time_t epochTime = timeClient.getEpochTime();
   struct tm* ptm = gmtime((time_t*)&epochTime);
-  // Command header
-  mySerial.print("<SETDATETIME");
-  // Format year to YY
-  mySerial.write(byte(ptm->tm_year - (int)100));
-  // Format month to DD
-  mySerial.write(byte(ptm->tm_mday));
-  // Format day to MM
-  mySerial.write(byte(ptm->tm_mon + 1));
-  // Format hours to HH. Check if DST
-  mySerial.write(byte(timeClient.getHours()));
-  // Format minutes to MM
-  mySerial.write(byte(timeClient.getMinutes()));
-  // Format seconds to SS
-  mySerial.write(byte(timeClient.getSeconds()));
-  // Terminating character
+  // Send year
+  sendData("<SETDATEYY", byte(ptm->tm_year - (int)100));
+  // Send month
+  sendData("<SETDATEMM", byte(ptm->tm_mon + 1));
+  // Send day
+  sendData("<SETDATEDD", byte(ptm->tm_mday));
+  // Send hour
+  sendData("<SETDATEHH", byte(ptm->tm_hour));
+  // Send minute
+  sendData("<SETDATEMM", byte(ptm->tm_min));
+  // Send seconds
+  sendData("<SETDATESS", byte(ptm->tm_sec));
+}
+
+bool sendData(const char *id, byte value) {
+  // Send data to virtual serial
+  mySerial.print(id);
+  mySerial.write(value);
   mySerial.println(">>");
-  delay(1);
+  delay(10);
   byte reply[1];
-  mySerial.readBytes(reply, 1);
-  delay(100);
+  int len = mySerial.readBytes(reply, 1);
   mySerial.flush();
+  if (reply[0] == 0xAA) {
+    return true;
+  } else {
+    return false;
+  }
 }
 
 void ntpUpdate() {
